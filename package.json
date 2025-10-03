@@ -1,13 +1,20 @@
+
 {
-  "name": "discord_bot",
+  "name": "Discord_mw3_bot",
   "version": "1.0.0",
-  "description": "My Discord Bot",
+  "description": "Discord bot for challenges, server copy/paste, and private threads",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
+  "author": "Void",
+  "license": "MIT",
   "dependencies": {
     "discord.js": "^14.15.3",
     "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   }
 }
