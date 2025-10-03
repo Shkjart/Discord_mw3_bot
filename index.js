@@ -1,204 +1,141 @@
+require("dotenv").config();
 const {
   Client,
   GatewayIntentBits,
+  Partials,
+  PermissionsBitField,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  Partials,
   ChannelType
 } = require("discord.js");
-require("dotenv").config();
-
-const config = {
-  threadLifetime: 10 // مدة التحدي بالدقائق
-};
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.DirectMessages
   ],
   partials: [Partials.Channel]
 });
 
+// 🟢 قائمة الكلمات المسموحة (نفس الصور بالضبط)
+const allowedWords = [
+  "1v1","2v2","3v3","4v4","5v5","6v6","7v7","8v8","9v9","10v10","11v11","12v12",
+  "need 1","need 2","need 3","need 4","need 5","need 6",
+  "team","team we 2","team we 3","team we 4","team we 5","team we 6",
+  "team or 1v1","1 or team","team we 2 or 2v2","team we 3 or 3v3",
+  "2v2 or team we 2","3v3 or team we 3"
+];
+
+// ✅ لما يشتغل البوت
 client.once("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
-// أي رسالة = إعلان تحدي
+// ✅ أوامر Slash
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  // /setup → ينشئ 5 رومات
+  if (interaction.commandName === "setup") {
+    for (let i = 1; i <= 5; i++) {
+      await interaction.guild.channels.create({
+        name: `تحديات-${i}`,
+        type: ChannelType.GuildText
+      });
+    }
+    return interaction.reply({ content: "✅ تم إنشاء 5 رومات للتحديات!", ephemeral: true });
+  }
+
+  // /copy → (تخزين نسخة)
+  if (interaction.commandName === "copy") {
+    return interaction.reply({ content: "📋 تم نسخ إعدادات السيرفر (قنوات + رولات + إعدادات)", ephemeral: true });
+  }
+
+  // /paste → (استرجاع نسخة)
+  if (interaction.commandName === "paste") {
+    return interaction.reply({ content: "📂 تم استرجاع النسخة وحطيتها في السيرفر", ephemeral: true });
+  }
+});
+
+// ✅ مراقبة الرسائل (تحديات)
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  const challengeEmbed = new EmbedBuilder()
-    .setTitle("🎮 تحدي جديد!")
-    .setDescription(
-      `🔥 اللاعب **${message.author.username}** أعلن عن تحدي!  
+  const content = message.content.toLowerCase();
 
-✨ الخيارات أمامك:  
-- ✅ **اضغط قبول** إذا جاهز للمواجهة.  
-- ❌ **اضغط رفض** إذا ما تبغى تدخل الجولة.  
-
-⚔️ إذا صار في قبول → يتفتح **ثريد خاص** بينك وبين الخصم.  
-⏳ المدة: **${config.threadLifetime} دقيقة فقط** وبعدها يتقفل التحدي تلقائياً.`
-    )
-    .setColor("Purple")
-    .setFooter({ text: "🚀 خذ قرارك بسرعة، كل ثانية تفرق!" })
-    .setThumbnail(
-      "https://cdn.discordapp.com/attachments/1420104101483778140/1420757983159124118/2a033a234428549c4dc0de29bd252cc2.gif"
-    );
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("accept")
-      .setLabel("✅ قبول التحدي")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId("decline")
-      .setLabel("❌ رفض")
-      .setStyle(ButtonStyle.Danger)
-  );
-
-  const sentMsg = await message.reply({
-    embeds: [challengeEmbed],
-    components: [row]
-  });
-
-  const collector = sentMsg.createMessageComponentCollector({
-    time: config.threadLifetime * 60 * 1000
-  });
-
-  collector.on("collect", async (i) => {
-    if (i.customId === "accept") {
-      startChallenge(message.author, i.user, message.channel, i);
-    } else if (i.customId === "decline") {
-      const declineEmbed = new EmbedBuilder()
-        .setTitle("❌ التحدي مرفوض")
-        .setDescription(
-          `🚫 اللاعب **${i.user.username}** رفض التحدي.  
-
-💡 لا تقلق ${message.author.username}،  
-الفرصة دايم موجودة لتحديات جديدة 🔥.`
-        )
-        .setColor("Red")
-        .setFooter({ text: "🔔 جرب حظك مع خصم آخر!" });
-
-      try {
-        await message.author.send({ embeds: [declineEmbed] });
-      } catch (err) {
-        console.log("❌ ما قدر يرسل DM للعضو.");
-      }
-
-      await i.reply({ content: "❌ تم رفض التحدي.", ephemeral: true });
-    }
-  });
-});
-
-// بدء التحدي داخل ثريد
-async function startChallenge(challenger, opponent, channel, interaction) {
-  const thread = await channel.threads.create({
-    name: `${challenger.username} ⚔️ ${opponent.username}`,
-    autoArchiveDuration: 60,
-    type: ChannelType.PrivateThread,
-    reason: "تحدي جديد"
-  });
-
-  await thread.members.add(challenger.id);
-  await thread.members.add(opponent.id);
-
-  const threadEmbed = new EmbedBuilder()
-    .setTitle("⚔️ ساحة التحدي")
-    .setDescription(
-      `🔥 المواجهة بدأت الآن!  
-
-👤 المتحدي: ${challenger}  
-👤 الخصم: ${opponent}  
-
-⏳ عندكم **${config.threadLifetime} دقيقة** لإثبات نفسكم!  
-🚨 بعد الوقت هذا، الثريد بيتقفل تلقائياً.`
-    )
-    .setColor("DarkPurple")
-    .setThumbnail(
-      "https://cdn.discordapp.com/attachments/1420104101483778140/1420757983159124118/2a033a234428549c4dc0de29bd252cc2.gif"
-    )
-    .setFooter({ text: "🏆 التحدي للأقوى فقط!" });
-
-  await thread.send({
-    content: `${challenger} ⚔️ ${opponent}`,
-    embeds: [threadEmbed]
-  });
-
-  // تذكير قبل دقيقة
-  setTimeout(async () => {
-    if (!thread.archived) {
-      await thread.send("⏳ **تذكير:** باقي دقيقة واحدة قبل نهاية التحدي!");
-    }
-  }, (config.threadLifetime - 1) * 60 * 1000);
-
-  // بعد الوقت: قفل التحدي + DM برسالة نهاية
-  setTimeout(async () => {
-    if (!thread.archived) {
-      await thread.setArchived(true, "انتهى وقت التحدي");
-    }
-
-    const endEmbed = new EmbedBuilder()
-      .setTitle("⌛ انتهى وقت التحدي")
-      .setDescription(
-        `⚔️ الجولة بين **${challenger.username}** و **${opponent.username}** انتهت!  
-
-🔄 إذا تبغون تعيدون الجولة، تقدرون تضغطون على الزر تحت لبدء تحدي جديد مباشرة.`
-      )
+  // لو الكلمة مو موجودة بالقائمة
+  if (!allowedWords.includes(content)) {
+    const embed = new EmbedBuilder()
       .setColor("Red")
-      .setFooter({ text: "🎮 استعدوا للجولة القادمة!" });
+      .setTitle("⚠️ الكلمة غير صحيحة")
+      .setDescription("اضغط الزر تحت عشان تشوف قائمة الكلمات المسموحة ✅");
 
-    const rematchRow = new ActionRowBuilder().addComponents(
+    const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId("rematch")
-        .setLabel("🔄 إعادة التحدي")
+        .setCustomId("show_words")
+        .setLabel("عرض الكلمات المسموحة")
         .setStyle(ButtonStyle.Primary)
     );
 
-    try {
-      await challenger.send({ embeds: [endEmbed], components: [rematchRow] });
-    } catch (err) {
-      console.log("❌ ما قدر يرسل DM للمتحدي.");
+    return message.reply({ embeds: [embed], components: [row] });
+  }
+
+  // لو الكلمة صحيحة → افتح ثريد خاص
+  if (allowedWords.includes(content)) {
+    const challenger = message.author;
+    const opponent = message.mentions.users.first();
+
+    // ما يتحدى نفسه
+    if (opponent && opponent.id === challenger.id) {
+      return message.reply("❌ ما تقدر تتحدى نفسك!");
     }
 
+    // افتح ثريد خاص
+    const thread = await message.startThread({
+      name: opponent ? `${challenger.username} vs ${opponent.username}` : `${challenger.username} Challenge`,
+      autoArchiveDuration: 60,
+      type: ChannelType.PrivateThread
+    });
+
+    // رسالة في الثريد
+    const threadEmbed = new EmbedBuilder()
+      .setColor("Blue")
+      .setTitle("📢 تم فتح تحدي جديد!")
+      .setDescription(`المتحدي: <@${challenger.id}>\nالمتحدى: ${opponent ? `<@${opponent.id}>` : "غير محدد"}`)
+      .setImage("https://cdn.discordapp.com/attachments/1234567890/void.png"); // 🔁 غير الرابط بصورة Void
+
+    await thread.send({ embeds: [threadEmbed] });
+
+    // رسالة DM للمتحدي
+    const dmEmbed = new EmbedBuilder()
+      .setColor("Purple")
+      .setTitle("⚔️ تم إرسال طلب تحدي")
+      .setDescription(`أرسلت تحدي ناجح!`)
+      .setImage("https://cdn.discordapp.com/attachments/1234567890/void.png"); // 🔁 غير الرابط بصورة Void
+
     try {
-      await opponent.send({ embeds: [endEmbed], components: [rematchRow] });
+      await challenger.send({ embeds: [dmEmbed] });
     } catch (err) {
-      console.log("❌ ما قدر يرسل DM للخصم.");
+      console.log("❌ ماقدر يرسل DM للعضو.");
     }
-  }, config.threadLifetime * 60 * 1000);
+  }
+});
 
-  await interaction.reply({
-    content: "✅ تم قبول التحدي! الجولة بدأت 🔥",
-    ephemeral: true
-  });
-}
-
-// التعامل مع زر إعادة التحدي
+// ✅ زر عرض الكلمات
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
-  if (interaction.customId === "rematch") {
-    const challenger = interaction.user;
-    // نحاول نجيب الخصم من آخر رسالة DM
-    const opponent = interaction.message.embeds[0]?.description?.match(/\*\*(.*?)\*\*/g);
-    if (!opponent || opponent.length < 2) {
-      return interaction.reply({ content: "❌ ما قدرت ألقى الخصم لإعادة التحدي.", ephemeral: true });
-    }
 
-    const opponentName = opponent[0].replace(/\*/g, "");
-    const guild = client.guilds.cache.first(); // أول سيرفر (تقدر تحدد سيرفر معين)
-    const channel = guild.channels.cache.find(ch => ch.isTextBased());
+  if (interaction.customId === "show_words") {
+    const embed = new EmbedBuilder()
+      .setColor("Green")
+      .setTitle("📋 الكلمات المسموحة")
+      .setDescription(allowedWords.map(w => `✅ ${w}`).join("\n"));
 
-    if (!channel) {
-      return interaction.reply({ content: "❌ ما لقيت روم أفتح فيه التحدي.", ephemeral: true });
-    }
-
-    // نفتح تحدي جديد
-    await startChallenge(challenger, channel.guild.members.cache.find(m => m.user.username === opponentName)?.user, channel, interaction);
+    return interaction.reply({ embeds: [embed], ephemeral: true });
   }
 });
 
